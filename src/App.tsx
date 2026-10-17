@@ -135,6 +135,17 @@ export default function App() {
 
   const taskInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to format due date nicely (e.g. 23 Oct)
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+
   // Keyboard shortcut: 'N' to focus task input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -186,7 +197,6 @@ export default function App() {
         setDisplayNameInput(session.user.user_metadata?.full_name || session.user.user_metadata?.display_name || '');
         setPhoneInput(session.user.user_metadata?.phone || session.user.phone || '');
       } else {
-        // Logout fix: load local tasks
         const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY_TASKS);
         setTasks(localSaved ? JSON.parse(localSaved) : DEFAULT_INITIAL_TASKS);
         const localProjs = localStorage.getItem(LOCAL_STORAGE_KEY_PROJECTS);
@@ -227,8 +237,8 @@ export default function App() {
           password,
           options: {
             data: {
-              full_name: displayNameInput || 'Manthan',
-              phone: phoneInput || ''
+              full_name: displayNameInput,
+              phone: phoneInput
             }
           }
         });
@@ -369,7 +379,7 @@ export default function App() {
     return streak;
   }, [tasks]);
 
-  // Next Up Task (Prioritizes Urgent, then nearest Due Date)
+  // Next Up Task
   const nextUpTask = useMemo(() => {
     const pendingTasks = tasks.filter(t => !t.is_completed);
     if (pendingTasks.length === 0) return null;
@@ -480,7 +490,7 @@ export default function App() {
     setTasks(tasks.filter(t => t.id !== id));
     if (session?.user) {
       try {
-        await supabase.from('tasks').delete().eq('id', id);
+        await supabase.from('tasks').delete({ count: 'exact' }).eq('id', id);
       } catch (err) {
         console.warn('Supabase delete error:', err);
       }
@@ -547,9 +557,9 @@ export default function App() {
 
   const metaName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.display_name;
   const emailName = session?.user?.email ? session.user.email.split('@')[0] : '';
-  const userName = displayNameInput || metaName || emailName || 'Manthan';
+  const userName = session?.user ? (displayNameInput || metaName || emailName || 'Manthan') : 'Guest';
 
-  // Dynamic Theme Styling Classes based on Theme Mode
+  // Dynamic Theme Styling Classes (White, Black, Dark Blue)
   const themeStyles = useMemo(() => {
     if (theme === 'black') {
       return {
@@ -559,7 +569,7 @@ export default function App() {
         headerBg: 'bg-zinc-900/80 border-zinc-800',
         inputBg: 'bg-zinc-950 text-white border-zinc-800',
         textMuted: 'text-zinc-400',
-        navBg: 'bg-zinc-900/90 border-zinc-700/80'
+        navBg: 'bg-zinc-900/95 border-zinc-700/80'
       };
     } else if (theme === 'darkblue') {
       return {
@@ -569,10 +579,9 @@ export default function App() {
         headerBg: 'bg-slate-900/80 border-slate-800',
         inputBg: 'bg-slate-950 text-white border-slate-800',
         textMuted: 'text-slate-400',
-        navBg: 'bg-slate-900/90 border-slate-700/80'
+        navBg: 'bg-slate-900/95 border-slate-700/80'
       };
     }
-    // Default White
     return {
       bg: 'bg-[#F8F6F0] text-slate-900',
       cardBg: 'bg-white border-slate-200/60 text-slate-900',
@@ -580,14 +589,14 @@ export default function App() {
       headerBg: 'bg-[#F8F6F0]/80 border-slate-200/60',
       inputBg: 'bg-white text-slate-900 border-slate-200',
       textMuted: 'text-slate-500',
-      navBg: 'bg-slate-900/90 border-slate-700/50'
+      navBg: 'bg-slate-900/95 border-slate-700/50 text-white'
     };
   }, [theme]);
 
   return (
-    <div className={`min-h-screen ${themeStyles.bg} flex flex-col font-sans pb-44 selection:bg-indigo-500 selection:text-white transition-colors duration-300`}>
+    <div className={`min-h-screen ${themeStyles.bg} flex flex-col font-sans pb-48 selection:bg-indigo-500 selection:text-white transition-colors duration-300`}>
       
-      {/* RESPONSIVE HEADER WITH WIDE DESKTOP CONTAINER */}
+      {/* HEADER */}
       <header className={`w-full max-w-xl md:max-w-2xl mx-auto px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between sticky top-0 z-30 backdrop-blur-md border-b ${themeStyles.headerBg}`}>
         <div 
           onClick={() => setActiveTab('Profile')}
@@ -599,7 +608,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-xs sm:text-sm font-extrabold group-hover:text-indigo-500 transition-colors">
-              Hello, {userName} 👋
+              Hello, {userName}
             </h1>
             <p className={`text-[10px] sm:text-[11px] font-medium ${themeStyles.textMuted} flex items-center gap-1`}>
               <Sparkles className="w-3 h-3 text-indigo-500" />
@@ -633,7 +642,7 @@ export default function App() {
           {session ? (
             <button 
               onClick={handleSignOut}
-              className="text-[11px] sm:text-xs font-bold text-slate-400 bg-slate-800/20 border border-slate-700/40 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-full hover:bg-rose-500/20 hover:text-rose-400 transition-colors shadow-sm cursor-pointer flex items-center space-x-1"
+              className="text-[11px] sm:text-xs font-bold text-white bg-indigo-600 border border-indigo-500 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-full hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer flex items-center space-x-1"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Logout</span>
@@ -661,10 +670,10 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN CONTAINER WITH EXPANDED DESKTOP WIDTH */}
+      {/* MAIN CONTAINER */}
       <main className="flex-1 w-full max-w-xl md:max-w-2xl mx-auto px-4 sm:px-6 space-y-6 mt-4">
         
-        {/* OVERVIEW / HOME TAB */}
+        {/* OVERVIEW TAB */}
         {activeTab === 'Overview' && (
           <div className="space-y-6 animate-fadeIn">
             
@@ -688,7 +697,6 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Next Up Priority Banner */}
               {nextUpTask && (
                 <div className="mt-4 p-3 bg-white/70 backdrop-blur-xs rounded-2xl border border-white/80 flex items-center justify-between z-10">
                   <div className="flex items-center space-x-2 min-w-0 pr-2">
@@ -699,7 +707,7 @@ export default function App() {
                   </div>
                   <button 
                     onClick={() => toggleTask(nextUpTask.id)}
-                    className="text-[10px] font-bold px-2.5 py-1 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition shrink-0"
+                    className="text-[10px] font-bold px-2.5 py-1 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition shrink-0 cursor-pointer"
                   >
                     Done
                   </button>
@@ -707,7 +715,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Clickable Metric Summary Cards */}
+            {/* Metric Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
               <div 
                 onClick={() => setFilter('All')} 
@@ -744,7 +752,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* INTEGRATED TASK MANAGEMENT */}
+            {/* TASK MANAGEMENT SECTION */}
             <div className={`p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border space-y-4 sm:space-y-5 ${themeStyles.cardBg}`}>
               
               <form onSubmit={handleSaveTask} className={`space-y-3 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border ${themeStyles.cardSubBg}`}>
@@ -757,7 +765,7 @@ export default function App() {
                   className={`w-full rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs focus:outline-none focus:border-indigo-500 shadow-sm ${themeStyles.inputBg}`}
                 />
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex gap-1">
                     {(['Work', 'Personal', 'Urgent'] as const).map(cat => (
                       <button
@@ -772,6 +780,14 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+
+                  <input 
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className={`rounded-xl px-2.5 py-1 text-[11px] focus:outline-none ${themeStyles.inputBg}`}
+                    title="Due Date"
+                  />
 
                   <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-1">
                     <Plus className="w-3.5 h-3.5" />
@@ -813,47 +829,48 @@ export default function App() {
                   <div className="text-center py-10 border border-dashed border-slate-700/30 rounded-3xl space-y-2">
                     <CheckSquare className="w-8 h-8 mx-auto opacity-30" />
                     <p className="text-xs font-semibold opacity-70">No tasks found in this view.</p>
-                    <p className="text-[11px] opacity-50">Type a new task above or press <kbd className="font-mono bg-slate-800/40 px-1 rounded">N</kbd> to get started!</p>
+                    <p className="text-[11px] opacity-50">Type a new task above or press 'N' to add one instantly.</p>
                   </div>
                 ) : (
                   filteredTasks.map(task => {
-                    const isOverdue = !task.is_completed && !!task.due_date && task.due_date < todayStr;
+                    const isOver = !task.is_completed && task.due_date && task.due_date < todayStr;
                     return (
                       <div 
                         key={task.id}
                         className={`group flex items-center justify-between p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
-                          isOverdue ? 'border-rose-500/50 bg-rose-500/5' : themeStyles.cardSubBg
+                          isOver ? 'bg-rose-500/10 border-rose-500/30' : themeStyles.cardSubBg
                         }`}
                       >
                         <div className="flex items-center space-x-2.5 sm:space-x-3 flex-1 min-w-0">
-                          <button onClick={() => toggleTask(task.id)} className="cursor-pointer">
+                          <button onClick={() => toggleTask(task.id)} className="cursor-pointer shrink-0">
                             {task.is_completed ? <CheckCircle2 className="w-5 h-5 text-indigo-500" /> : <Circle className="w-5 h-5 opacity-40" />}
                           </button>
-                          <div className="min-w-0 flex-1">
-                            <span className={`text-xs font-bold block truncate ${task.is_completed ? 'line-through opacity-40' : ''} ${isOverdue ? 'text-rose-500 font-extrabold' : ''}`}>
+                          <div className="flex flex-col min-w-0">
+                            <span className={`text-xs font-bold truncate ${task.is_completed ? 'line-through opacity-40' : ''}`}>
                               {task.title}
                             </span>
                             {task.due_date && (
-                              <span className={`text-[10px] block ${isOverdue ? 'text-rose-400 font-bold' : 'opacity-50'}`}>
-                                Due: {task.due_date} {isOverdue && '(Overdue)'}
+                              <span className={`text-[10px] ${themeStyles.textMuted} flex items-center gap-1 mt-0.5`}>
+                                <CalendarIcon className="w-3 h-3 text-indigo-500" />
+                                <span>{formatDate(task.due_date)}</span>
                               </span>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-1.5 sm:space-x-2 ml-2">
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                            task.category === 'Urgent' ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' :
-                            task.category === 'Work' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
-                            'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                          }`}>
+                        <div className="flex items-center space-x-2 ml-2 shrink-0">
+                          {isOver && (
+                            <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-500 border border-rose-500/30">
+                              Overdue
+                            </span>
+                          )}
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-800/10 opacity-80">
                             {task.category}
                           </span>
-
-                          <button onClick={() => startEdit(task)} className="p-1 opacity-50 hover:opacity-100 hover:text-indigo-400 cursor-pointer">
+                          <button onClick={() => startEdit(task)} className="p-1 opacity-40 hover:opacity-100 transition cursor-pointer">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => deleteTask(task.id)} className="p-1 opacity-50 hover:opacity-100 hover:text-rose-500 cursor-pointer">
+                          <button onClick={() => deleteTask(task.id)} className="p-1 text-rose-500 opacity-60 hover:opacity-100 transition cursor-pointer">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -875,7 +892,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base sm:text-lg font-black">{editingTask ? 'Edit Task' : 'Dedicated Task Hub'}</h2>
-                  <p className={`text-xs ${themeStyles.textMuted}`}>Manage categories, projects and deadlines.</p>
+                  <p className={`text-xs ${themeStyles.textMuted}`}>Manage categories, due dates, and projects.</p>
                 </div>
                 {editingTask && (
                   <button onClick={() => setEditingTask(null)} className="text-xs text-rose-500 font-bold hover:underline cursor-pointer">
@@ -889,7 +906,7 @@ export default function App() {
                   type="text"
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Task description..."
+                  placeholder="Task title..."
                   className={`w-full rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs focus:outline-none focus:border-indigo-500 shadow-sm ${themeStyles.inputBg}`}
                 />
 
@@ -931,31 +948,42 @@ export default function App() {
 
                   <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-1">
                     {editingTask ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                    <span>{editingTask ? 'Update' : 'Add Task'}</span>
+                    <span>{editingTask ? 'Update Task' : 'Add Task'}</span>
                   </button>
                 </div>
               </form>
 
               <div className="space-y-2">
-                {filteredTasks.map(task => (
+                {tasks.map(task => (
                   <div 
                     key={task.id}
                     className={`flex items-center justify-between p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border ${themeStyles.cardSubBg}`}
                   >
                     <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <button onClick={() => toggleTask(task.id)} className="cursor-pointer">
+                      <button onClick={() => toggleTask(task.id)} className="cursor-pointer shrink-0">
                         {task.is_completed ? <CheckCircle2 className="w-5 h-5 text-indigo-500" /> : <Circle className="w-5 h-5 opacity-40" />}
                       </button>
-                      <span className={`text-xs font-bold truncate ${task.is_completed ? 'line-through opacity-40' : ''}`}>
-                        {task.title}
-                      </span>
+                      <div className="flex flex-col min-w-0">
+                        <span className={`text-xs font-bold truncate ${task.is_completed ? 'line-through opacity-40' : ''}`}>
+                          {task.title}
+                        </span>
+                        {task.due_date && (
+                          <span className={`text-[10px] ${themeStyles.textMuted} flex items-center gap-1 mt-0.5`}>
+                            <CalendarIcon className="w-3 h-3 text-indigo-500" />
+                            <span>{formatDate(task.due_date)}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex items-center space-x-2 ml-2">
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-800/20 opacity-80">
+                    <div className="flex items-center space-x-2 ml-2 shrink-0">
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-800/10 opacity-80">
                         {task.category}
                       </span>
-                      <button onClick={() => deleteTask(task.id)} className="p-1 opacity-50 hover:opacity-100 hover:text-rose-500 cursor-pointer">
+                      <button onClick={() => startEdit(task)} className="p-1 opacity-40 hover:opacity-100 cursor-pointer">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => deleteTask(task.id)} className="p-1 text-rose-500 opacity-60 hover:opacity-100 cursor-pointer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -992,7 +1020,7 @@ export default function App() {
                       <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider bg-white/60 px-3 py-1 rounded-full text-slate-800">
                         {proj.category}
                       </span>
-                      <h3 className="text-lg sm:text-xl font-black text-slate-900 mt-2">{proj.title}</h3>
+                      <h3 className="text-lg sm:text-xl font-black mt-2">{proj.title}</h3>
                       <p className="text-xs text-slate-700 font-medium mt-1">{proj.description}</p>
                     </div>
 
@@ -1012,14 +1040,14 @@ export default function App() {
           </div>
         )}
 
-        {/* PROGRESS TAB (REAL TASKS CALCULATED STATS) */}
+        {/* PROGRESS TAB */}
         {activeTab === 'Progress' && (
           <div className="space-y-6 animate-fadeIn">
             <div className={`p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border space-y-4 ${themeStyles.cardBg}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-black">7-Day Completion Velocity</h3>
-                  <p className={`text-[11px] ${themeStyles.textMuted}`}>Real task completions per day</p>
+                  <h3 className="text-sm font-black">7-Day Task Completion Graph</h3>
+                  <p className={`text-[11px] ${themeStyles.textMuted}`}>Real task activity over the past week</p>
                 </div>
                 <div className="flex items-center space-x-1.5 bg-indigo-500/10 px-2.5 py-1 rounded-xl border border-indigo-500/20 text-indigo-400 text-xs font-bold">
                   <BarChart3 className="w-3.5 h-3.5" />
@@ -1027,30 +1055,23 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Real Weekly Graph */}
               <div className="relative pt-6 pb-2 px-1 sm:px-2">
                 <div className="flex items-end justify-between h-40 sm:h-44 pl-2 pr-2 z-10 relative">
                   {weeklyChartData.map((bar, idx) => (
                     <div key={idx} className="flex flex-col items-center flex-1 space-y-2 group">
-                      <div className="w-5 sm:w-7 h-32 sm:h-36 bg-slate-800/20 rounded-xl sm:rounded-2xl relative overflow-hidden flex flex-col justify-end border border-slate-700/30">
+                      <div className={`w-6 sm:w-8 h-32 sm:h-36 rounded-xl relative overflow-hidden flex flex-col justify-end border ${themeStyles.cardSubBg}`}>
                         <div 
-                          className="absolute inset-0 opacity-20" 
-                          style={{ 
-                            backgroundImage: 'repeating-linear-gradient(45deg, #6366f1 0, #6366f1 2px, transparent 0, transparent 6px)' 
-                          }}
-                        />
-                        <div 
-                          className={`w-full rounded-xl sm:rounded-2xl transition-all duration-500 relative flex justify-center pt-1 shadow-sm ${
-                            bar.active ? 'bg-indigo-600' : 'bg-indigo-400/70'
+                          className={`w-full rounded-xl transition-all duration-500 relative flex flex-col justify-between items-center py-1 shadow-sm ${
+                            bar.active ? 'bg-indigo-600' : 'bg-sky-500'
                           }`}
-                          style={{ height: `${Math.max(bar.percent, 8)}%` }}
+                          style={{ height: `${bar.percent > 0 ? Math.max(bar.percent, 12) : 8}%` }}
                         >
-                          <span className="text-[8px] sm:text-[9px] font-extrabold text-white bg-black/20 px-1 rounded-full h-3.5 sm:h-4 flex items-center justify-center">
+                          <span className="text-[9px] font-extrabold text-white bg-black/20 px-1 rounded-full">
                             {bar.count}
                           </span>
                         </div>
                       </div>
-                      <span className={`text-[10px] sm:text-[11px] font-bold ${bar.active ? 'text-indigo-400 font-black' : 'opacity-50'}`}>
+                      <span className={`text-[10px] sm:text-[11px] font-bold ${bar.active ? 'text-indigo-500 font-black' : themeStyles.textMuted}`}>
                         {bar.day}
                       </span>
                     </div>
@@ -1061,17 +1082,17 @@ export default function App() {
 
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border shadow-sm space-y-1 sm:space-y-2 ${themeStyles.cardBg}`}>
-                <span className="text-[9px] sm:text-[10px] uppercase font-bold opacity-60">Completion Rate</span>
+                <span className={`text-[9px] sm:text-[10px] uppercase font-bold ${themeStyles.textMuted}`}>Total Rate</span>
                 <p className="text-xl sm:text-2xl font-black">{progressPercentage}%</p>
                 <p className="text-[10px] sm:text-[11px] text-emerald-500 font-bold flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" /> Live Productivity
+                  <TrendingUp className="w-3 h-3" /> Live Calculated
                 </p>
               </div>
 
               <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border shadow-sm space-y-1 sm:space-y-2 ${themeStyles.cardBg}`}>
-                <span className="text-[9px] sm:text-[10px] uppercase font-bold opacity-60">Streak</span>
-                <p className="text-xl sm:text-2xl font-black text-amber-500">{streakCount} Days</p>
-                <p className="text-[10px] sm:text-[11px] opacity-60">Consecutive activity</p>
+                <span className={`text-[9px] sm:text-[10px] uppercase font-bold ${themeStyles.textMuted}`}>Completed Tasks</span>
+                <p className="text-xl sm:text-2xl font-black text-indigo-500">{completedCount} <span className={`text-xs font-medium ${themeStyles.textMuted}`}>/ {tasks.length}</span></p>
+                <p className={`text-[10px] sm:text-[11px] ${themeStyles.textMuted}`}>On schedule</p>
               </div>
             </div>
           </div>
@@ -1082,32 +1103,31 @@ export default function App() {
           <div className="space-y-6 animate-fadeIn">
             <div className={`p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border space-y-5 ${themeStyles.cardBg}`}>
               
-              <div className="flex items-center space-x-4 border-b border-slate-800/30 pb-5">
+              <div className="flex items-center space-x-4 border-b border-slate-700/20 pb-5">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl sm:text-2xl font-black shadow-md">
                   {userName.charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <h2 className="text-base sm:text-lg font-black">{userName}</h2>
-                  <p className={`text-xs ${themeStyles.textMuted}`}>{session?.user?.email || 'Active Session'}</p>
-                  <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2.5 py-0.5 bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/20">
-                    <ShieldCheck className="w-3 h-3 inline mr-1" /> Account Verified
+                  <p className={`text-xs ${themeStyles.textMuted}`}>{session?.user?.email || 'Active Local Mode'}</p>
+                  <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2.5 py-0.5 bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/30">
+                    <ShieldCheck className="w-3 h-3 inline mr-1" /> Account Active
                   </span>
                 </div>
               </div>
 
               {profileSuccessMsg && (
-                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold flex items-center gap-2">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
                   <Check className="w-4 h-4" />
                   <span>{profileSuccessMsg}</span>
                 </div>
               )}
 
-              {/* Edit Profile Form */}
               <form onSubmit={handleUpdateProfile} className="space-y-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider opacity-60">Edit Account Details</h3>
+                <h3 className={`text-xs font-extrabold uppercase tracking-wider ${themeStyles.textMuted}`}>Edit Account Details</h3>
                 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold">Display Name</label>
+                  <label className="text-[11px] font-bold">Display Name (Required)</label>
                   <div className="relative">
                     <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-40" />
                     <input 
@@ -1115,13 +1135,14 @@ export default function App() {
                       value={displayNameInput}
                       onChange={(e) => setDisplayNameInput(e.target.value)}
                       placeholder="Your full name..."
+                      required
                       className={`w-full rounded-2xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold">Mobile Number</label>
+                  <label className="text-[11px] font-bold">Mobile Number (Required)</label>
                   <div className="relative">
                     <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-40" />
                     <input 
@@ -1129,6 +1150,7 @@ export default function App() {
                       value={phoneInput}
                       onChange={(e) => setPhoneInput(e.target.value)}
                       placeholder="+91 9876543210"
+                      required
                       className={`w-full rounded-2xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
                     />
                   </div>
@@ -1144,11 +1166,11 @@ export default function App() {
                 </button>
               </form>
 
-              <div className="pt-2 border-t border-slate-800/30">
+              <div className="pt-2 border-t border-slate-700/20">
                 {session ? (
                   <button 
                     onClick={handleSignOut}
-                    className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold py-3 rounded-2xl border border-rose-500/20 transition-all cursor-pointer flex items-center justify-center space-x-2"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-3 rounded-2xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign Out</span>
@@ -1159,7 +1181,7 @@ export default function App() {
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-3 rounded-2xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
                   >
                     <LogIn className="w-4 h-4" />
-                    <span>Login to Cloud Account</span>
+                    <span>Login to Account</span>
                   </button>
                 )}
               </div>
@@ -1167,10 +1189,17 @@ export default function App() {
           </div>
         )}
 
+        {/* BRANDBUZZ STUDIO FOOTER */}
+        <footer className="w-full py-8 text-center mt-12 border-t border-slate-700/20">
+          <p className="text-xl sm:text-2xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 drop-shadow-sm">
+            Made by BrandBuzz Studio
+          </p>
+        </footer>
+
       </main>
 
-      {/* MOBILE & DESKTOP BOTTOM NAVIGATION BAR WITH EXPANDED PADDING */}
-      <nav className={`fixed bottom-5 left-1/2 -translate-x-1/2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full shadow-2xl z-40 flex items-center space-x-1 sm:space-x-2 border max-w-[94vw] ${themeStyles.navBg}`}>
+      {/* FIXED RESPONSIVE BOTTOM NAVIGATION BAR */}
+      <nav className={`fixed bottom-4 left-1/2 -translate-x-1/2 backdrop-blur-xl px-2 py-2 rounded-full shadow-2xl z-40 grid grid-cols-5 gap-1 border w-[92vw] max-w-sm sm:max-w-md ${themeStyles.navBg}`}>
         {[
           { id: 'Overview', icon: LayoutDashboard },
           { id: 'Tasks', icon: CheckSquare },
@@ -1184,12 +1213,13 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center space-x-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+              className={`flex flex-col sm:flex-row items-center justify-center sm:space-x-1.5 py-2.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 isActive ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
               }`}
+              title={tab.id}
             >
-              <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className={isActive ? 'inline' : 'hidden sm:inline'}>{tab.id}</span>
+              <Icon className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline text-xs">{tab.id}</span>
             </button>
           );
         })}
@@ -1197,21 +1227,21 @@ export default function App() {
 
       {/* ACTIVITY HISTORY MODAL */}
       {showHistoryModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className={`rounded-[2rem] sm:rounded-[2.5rem] max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border ${themeStyles.cardBg}`}>
-            <div className="flex items-center justify-between border-b border-slate-800/20 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-700/20 pb-3">
               <div className="flex items-center space-x-2">
                 <History className="w-4 h-4 text-indigo-500" />
                 <h3 className="text-sm font-black">Task Activity Log</h3>
               </div>
-              <button onClick={() => setShowHistoryModal(false)} className="w-7 h-7 rounded-full bg-slate-800/20 flex items-center justify-center opacity-70 hover:opacity-100 cursor-pointer">
+              <button onClick={() => setShowHistoryModal(false)} className="w-7 h-7 rounded-full bg-slate-800/30 flex items-center justify-center cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
               {taskHistory.length === 0 ? (
-                <div className="text-center py-8 opacity-50 text-xs">
+                <div className={`text-center py-8 text-xs ${themeStyles.textMuted}`}>
                   No recent activity logged.
                 </div>
               ) : (
@@ -1219,12 +1249,12 @@ export default function App() {
                   <div key={log.id} className={`p-3 rounded-2xl border flex items-center justify-between text-xs ${themeStyles.cardSubBg}`}>
                     <div>
                       <p className="font-bold truncate max-w-[180px]">{log.title}</p>
-                      <span className="text-[9px] opacity-50">{log.timestamp} • {log.category}</span>
+                      <span className={`text-[9px] ${themeStyles.textMuted}`}>{log.timestamp} • {log.category}</span>
                     </div>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      log.action === 'completed' ? 'bg-emerald-500/10 text-emerald-500' :
-                      log.action === 'deleted' ? 'bg-rose-500/10 text-rose-500' :
-                      'bg-indigo-500/10 text-indigo-400'
+                      log.action === 'completed' ? 'bg-emerald-500/20 text-emerald-500' :
+                      log.action === 'deleted' ? 'bg-rose-500/20 text-rose-500' :
+                      'bg-indigo-500/20 text-indigo-500'
                     }`}>
                       {log.action}
                     </span>
@@ -1236,7 +1266,7 @@ export default function App() {
             {taskHistory.length > 0 && (
               <button 
                 onClick={clearHistory}
-                className="w-full bg-slate-800/20 hover:bg-rose-500/10 hover:text-rose-500 text-xs font-bold py-2.5 rounded-2xl transition-all cursor-pointer flex items-center justify-center space-x-1"
+                className="w-full bg-slate-800/30 hover:bg-rose-500/25 hover:text-rose-500 text-xs font-bold py-2.5 rounded-2xl transition-all cursor-pointer flex items-center justify-center space-x-1"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Clear History Log</span>
@@ -1248,65 +1278,88 @@ export default function App() {
 
       {/* AUTH MODAL */}
       {showAuthModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className={`rounded-[2rem] sm:rounded-[2.5rem] max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border ${themeStyles.cardBg}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black">{isSignUp ? 'Create Account' : 'Welcome Back'}</h3>
-              <button onClick={() => setShowAuthModal(false)} className="w-8 h-8 rounded-full bg-slate-800/20 flex items-center justify-center opacity-70 hover:opacity-100 cursor-pointer">
+              <button onClick={() => setShowAuthModal(false)} className="w-8 h-8 rounded-full bg-slate-800/30 flex items-center justify-center cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {authError && (
-              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold">
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-bold">
                 {authError}
               </div>
             )}
 
             <form onSubmit={handleAuthSubmit} className="space-y-3">
               {isSignUp && (
-                <input 
-                  type="text"
-                  value={displayNameInput}
-                  onChange={(e) => setDisplayNameInput(e.target.value)}
-                  placeholder="Your Full Name..."
-                  required
-                  className={`w-full rounded-2xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
-                />
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold opacity-70">Full Name (Required)</label>
+                    <input 
+                      type="text"
+                      value={displayNameInput}
+                      onChange={(e) => setDisplayNameInput(e.target.value)}
+                      placeholder="Your Full Name..."
+                      required
+                      className={`w-full rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold opacity-70">Mobile Number (Required)</label>
+                    <input 
+                      type="text"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder="+91 9876543210"
+                      required
+                      className={`w-full rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
+                    />
+                  </div>
+                </>
               )}
 
-              <input 
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email address..."
-                required
-                className={`w-full rounded-2xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
-              />
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold opacity-70">Email Address</label>
+                <input 
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email address..."
+                  required
+                  className={`w-full rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
+                />
+              </div>
 
-              <input 
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password (min 6 chars)..."
-                required
-                className={`w-full rounded-2xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
-              />
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold opacity-70">Password</label>
+                <input 
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password (min 6 chars)..."
+                  required
+                  className={`w-full rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-indigo-500 ${themeStyles.inputBg}`}
+                />
+              </div>
 
               <button 
                 type="submit" 
                 disabled={authLoading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-2xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-2xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2 mt-2"
               >
                 <span>{authLoading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}</span>
               </button>
             </form>
 
-            <div className="text-center">
+            <div className="text-center pt-1">
               <button 
                 type="button"
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="text-xs font-bold text-indigo-500 hover:underline cursor-pointer"
+                className="text-xs font-bold text-indigo-400 hover:underline cursor-pointer"
               >
                 {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </button>
@@ -1317,11 +1370,11 @@ export default function App() {
 
       {/* NEW PROJECT MODAL */}
       {showProjectModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className={`rounded-[2rem] sm:rounded-[2.5rem] max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border ${themeStyles.cardBg}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black">Create New Project</h3>
-              <button onClick={() => setShowProjectModal(false)} className="w-8 h-8 rounded-full bg-slate-800/20 flex items-center justify-center opacity-70 hover:opacity-100 cursor-pointer">
+              <button onClick={() => setShowProjectModal(false)} className="w-8 h-8 rounded-full bg-slate-800/30 flex items-center justify-center cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1367,9 +1420,9 @@ export default function App() {
 
       {/* UNDO TOAST */}
       {showUndoToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-5 py-3 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 text-xs animate-bounce">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 text-xs animate-bounce border border-slate-700">
           <span>Task deleted.</span>
-          <button onClick={undoDelete} className="text-white font-black underline flex items-center space-x-1 cursor-pointer">
+          <button onClick={undoDelete} className="text-indigo-400 font-bold hover:underline flex items-center space-x-1 cursor-pointer">
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Undo</span>
           </button>
